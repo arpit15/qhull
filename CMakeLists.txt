@@ -336,27 +336,28 @@ set(
 include_directories(${CMAKE_SOURCE_DIR}/src)
 
 if(CMAKE_BUILD_TYPE MATCHES "[dD]ebug")
-    set(qhull_CPP qhullcpp_d)
-    set(qhull_SHARED qhull_d) 
-    set(qhull_SHAREDP qhull_pd)
-    set(qhull_SHAREDR qhull_rd)
-    set(qhull_STATIC qhullstatic_d)
-    set(qhull_STATICR qhullstatic_rd)
-else()
     set(qhull_CPP qhullcpp)
-    set(qhull_SHARED libqhull)  # Temporarily avoid name conflict with qhull executable
+    set(qhull_SHARED qhull)
     set(qhull_SHAREDP qhull_p)
     set(qhull_SHAREDR qhull_r)
-    set(qhull_STATIC qhullstatic)
-    set(qhull_STATICR qhullstatic_r)
+else()
+    set(qhull_CPP qhullcpp)
+    set(qhull_SHARED qhull)  # Temporarily avoid name conflict with qhull executable
+    set(qhull_SHAREDP qhull_p)
+    set(qhull_SHAREDR qhull_r)
 endif()
 
 set(
     qhull_TARGETS_INSTALL
-        ${qhull_CPP} ${qhull_STATIC} ${qhull_STATICR} ${qhull_SHAREDR}
-        qhull rbox qconvex qdelaunay qvoronoi qhalf
+        ${qhull_STATIC} ${qhull_STATICR} ${qhull_SHAREDR}
+        qhull_run rbox qconvex qdelaunay qvoronoi qhalf
         ${qhull_SHARED} ${qhull_SHAREDP}  # Deprecated, use qhull_r instead
 )
+
+if(NOT BUILD_SHARED_LIBS)
+  list(APPEND qhull_TARGETS_INSTALL ${qhull_CPP})
+endif()
+
 set(
     qhull_TARGETS_TEST   # Unused
         user_eg user_eg2 user_eg3 user_egp testqset testqset_r
@@ -366,12 +367,14 @@ set(
 # Define shared library for reentrant qhull (installed)
 # ---------------------------------------
 
-add_library(${qhull_SHAREDR} SHARED 
+add_library(${qhull_SHAREDR}
         ${libqhullr_SOURCES}
         src/libqhull_r/qhull_r-exports.def)
 set_target_properties(${qhull_SHAREDR} PROPERTIES
     SOVERSION ${qhull_SOVERSION}
     VERSION ${qhull_VERSION})
+
+set_target_properties(${qhull_SHAREDR} PROPERTIES DEBUG_POSTFIX "_d")
 
 if(UNIX)
     target_link_libraries(${qhull_SHAREDR} m)
@@ -390,10 +393,12 @@ endif(UNIX)
 # Define shared library for non-reentrant qhull without qh_QHpointer
 # ---------------------------------------
 
-add_library(${qhull_SHARED} SHARED 
+add_library(${qhull_SHARED}
         ${libqhull_SOURCES}
         src/libqhull/qhull-exports.def)
         
+set_target_properties(${qhull_SHARED} PROPERTIES DEBUG_POSTFIX "_d")
+
 if(qhull_SHARED MATCHES "libqhull")
    set(qhull_OUTPUT_NAME qhull)
    set_target_properties(${qhull_SHARED} PROPERTIES
@@ -421,13 +426,14 @@ endif(UNIX)
 # Define old shared library qhull with qh_QHpointer
 # ---------------------------------------
 
-add_library(${qhull_SHAREDP} SHARED 
+add_library(${qhull_SHAREDP}
         ${libqhull_SOURCES}
         src/libqhull/qhull_p-exports.def)
 set_target_properties(${qhull_SHAREDP} PROPERTIES
     COMPILE_DEFINITIONS "qh_QHpointer"
     SOVERSION ${qhull_SOVERSION}
     VERSION ${qhull_VERSION})
+set_target_properties(${qhull_SHAREDP} PROPERTIES DEBUG_POSTFIX "_d")
 
 if(UNIX)
     target_link_libraries(${qhull_SHAREDP} m)
@@ -442,32 +448,33 @@ if(UNIX)
     endif()
 endif(UNIX)
 
-# ---------------------------------------
-# Define static libraries qhullstatic (non-reentrant) and qhullstatic_r (reentrant)
-# ---------------------------------------
-
-add_library(${qhull_STATIC} STATIC ${libqhull_SOURCES})
-set_target_properties(${qhull_STATIC} PROPERTIES
-    VERSION ${qhull_VERSION})
-
-add_library(${qhull_STATICR} STATIC ${libqhullr_SOURCES})
-set_target_properties(${qhull_STATICR} PROPERTIES
-    VERSION ${qhull_VERSION})
-
-if(UNIX)
-    target_link_libraries(${qhull_STATIC} m)
-    target_link_libraries(${qhull_STATICR} m)
-endif(UNIX)
-
+# # ---------------------------------------
+# # Define static libraries qhullstatic (non-reentrant) and qhullstatic_r (reentrant)
+# # ---------------------------------------
+#
+# add_library(${qhull_STATIC} STATIC ${libqhull_SOURCES})
+# set_target_properties(${qhull_STATIC} PROPERTIES
+#     VERSION ${qhull_VERSION})
+#
+# add_library(${qhull_STATICR} STATIC ${libqhullr_SOURCES})
+# set_target_properties(${qhull_STATICR} PROPERTIES
+#     VERSION ${qhull_VERSION})
+#
+# if(UNIX)
+#     target_link_libraries(${qhull_STATIC} m)
+#     target_link_libraries(${qhull_STATICR} m)
+# endif(UNIX)
+#
 # ---------------------------------------
 # Define C++ static library qhullcpp
 #     Do not create libqhullcpp as a shared library.  Qhull C++ classes may change layout and size. 
 # ---------------------------------------
-
-add_library(${qhull_CPP} STATIC ${libqhullcpp_SOURCES})
-set_target_properties(${qhull_CPP} PROPERTIES
+if (NOT BUILD_SHARED_LIBS)
+  add_library(${qhull_CPP} STATIC ${libqhullcpp_SOURCES})
+  set_target_properties(${qhull_CPP} PROPERTIES
     VERSION ${qhull_VERSION})
-
+  set_target_properties(${qhull_CPP} PROPERTIES DEBUG_POSTFIX "_d")
+endif()
 # ---------------------------------------
 # Define qhull executables linked to qhullstatic library
 #   qhull is linked to reentrant qhull (more flexible)
@@ -483,23 +490,23 @@ set(qdelaunay_SOURCES   src/qdelaunay/qdelaun.c)
 set(qvoronoi_SOURCES    src/qvoronoi/qvoronoi.c)
 set(qhalf_SOURCES       src/qhalf/qhalf.c)
 
-add_executable(qhull ${qhull_SOURCES})
-target_link_libraries(qhull ${qhull_STATICR})
+add_executable(qhull_run ${qhull_SOURCES})
+target_link_libraries(qhull_run ${qhull_SHAREDR})
 
 add_executable(rbox ${rbox_SOURCES})
-target_link_libraries(rbox ${qhull_STATIC})
+target_link_libraries(rbox ${qhull_SHARED})
 
 add_executable(qconvex ${qconvex_SOURCES})
-target_link_libraries(qconvex ${qhull_STATIC})
+target_link_libraries(qconvex ${qhull_SHARED})
 
 add_executable(qdelaunay ${qdelaunay_SOURCES})
-target_link_libraries(qdelaunay ${qhull_STATIC})
+target_link_libraries(qdelaunay ${qhull_SHARED})
 
 add_executable(qvoronoi ${qvoronoi_SOURCES})
-target_link_libraries(qvoronoi ${qhull_STATIC})
+target_link_libraries(qvoronoi ${qhull_SHARED})
 
 add_executable(qhalf ${qhalf_SOURCES})
-target_link_libraries(qhalf ${qhull_STATIC})
+target_link_libraries(qhalf ${qhull_SHARED})
 
 # ---------------------------------------
 # Define options for linking to qhull_SHAREDR or qhull_SHARED
@@ -546,7 +553,7 @@ set(user_eg2_SOURCES    src/user_eg2/user_eg2_r.c)
 
 add_executable(user_eg2 ${user_eg2_SOURCES})
 # user_eg2 may be linked to qhull_SHAREDR if user_eg2_DEFINES is added
-target_link_libraries(user_eg2 ${qhull_STATICR})
+target_link_libraries(user_eg2 ${qhull_SHAREDR})
 
 # ---------------------------------------
 # Define user_eg3 linked to qhullstatic_r and qhullcpp static library
@@ -554,12 +561,13 @@ target_link_libraries(user_eg2 ${qhull_STATICR})
 # user_eg3 and qhullcpp must be compiled with the same compiler for setjmp/longjmp
 # ---------------------------------------
 
-set(user_eg3_SOURCES    src/user_eg3/user_eg3_r.cpp)
-
-add_executable(user_eg3 ${user_eg3_SOURCES})
-# qhull_STATICR must be last, otherwise qh_fprintf,etc. are not loaded from qhull_CPP
-# user_eg3 may be linked to qhull_SHAREDR if user_eg3_DEFINES is added
-target_link_libraries(user_eg3 ${qhull_CPP} ${qhull_STATICR})
+if(NOT BUILD_SHARED_LIBS)
+  set(user_eg3_SOURCES    src/user_eg3/user_eg3_r.cpp)
+  add_executable(user_eg3 ${user_eg3_SOURCES})
+  # qhull_STATICR must be last, otherwise qh_fprintf,etc. are not loaded from qhull_CPP
+  # user_eg3 may be linked to qhull_SHAREDR if user_eg3_DEFINES is added
+  target_link_libraries(user_eg3 ${qhull_CPP} ${qhull_SHAREDR})
+endif()
 
 # ---------------------------------------
 # qhullp is qhull/unix.c linked to deprecated qh_QHpointer libqhull_p
@@ -595,9 +603,9 @@ add_test(NAME testqset
 add_test(NAME testqset_r
    COMMAND ./testqset_r 10000)
 add_test(NAME smoketest
-   COMMAND sh -c "./rbox D4 | ./qhull Tv")
+   COMMAND sh -c "./rbox D4 | ./qhull_run Tv")
 add_test(NAME rbox-10-qhull
-   COMMAND sh -c "./rbox 10 | ./qhull Tv")
+   COMMAND sh -c "./rbox 10 | ./qhull_run Tv")
 add_test(NAME rbox-10-qconvex
    COMMAND sh -c "./rbox 10 | ./qconvex Tv")
 add_test(NAME rbox-10-qdelaunay
@@ -610,8 +618,10 @@ add_test(NAME user_eg
    COMMAND sh -c "./user_eg")
 add_test(NAME user_eg2
    COMMAND sh -c "./user_eg2")
-add_test(NAME user_eg3
+if(NOT BUILD_SHARED_LIBS)
+  add_test(NAME user_eg3
    COMMAND sh -c "./user_eg3 rbox '10 D2' '2 D2' qhull 's p' facets")
+endif()
 
 # ---------------------------------------
 # Define install
